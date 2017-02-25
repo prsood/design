@@ -83,12 +83,19 @@ def search_mailbox(server_connection, box='INBOX', flag='UNSEEN'):
 def download_mails(server_connection, mail):
     """ Download mail and return mail content.Return subject is to used to generate email file name
     'subject' is dict key in email head ,'from' ,'to' can be acquire too"""
+    # if connection unstable exception could be raised
     _, message_data = server_connection.fetch(mail, '(RFC822)')
     charset = 'utf-8'
     for response_part in message_data:
         if isinstance(response_part, tuple):
             # Get email.message.Message class instance
-            message_class = message_from_string(response_part[1].decode())
+            # Test if email download complete
+            # Standard is end with "--\n"
+            email_content = response_part[1].decode()
+            if not (email_content.endswith('--\r\n') or email_content.endswith('--\n')):
+                print('Download Email Error')
+                return None, None
+            message_class = message_from_string(email_content)
             mail_subject = message_class.get('subject')
             if mail_subject != '':
                 # if you are sure that all mails' charset are utf-8
@@ -110,6 +117,8 @@ def download_mails(server_connection, mail):
                         utf_subject = ''.join(sample(hexdigits, 8))
 
             email_content = message_class.as_string(unixfrom=True)
+        else:
+            return None, None
     return email_content, utf_subject
 
 
@@ -199,7 +208,7 @@ if __name__ == "__main__":
         while True:
             print("Begin Receive Mail at ", end="")
             print(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-            # main()
+            main()
             print("Sleeping...")
             sleep(1*60)
     except KeyboardInterrupt as e:
