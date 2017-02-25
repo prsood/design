@@ -6,8 +6,10 @@ from string import hexdigits
 from re import search
 from time import sleep
 from os.path import isfile
+from datetime import datetime
 # below package should be install by manual
 from configparser import ConfigParser
+
 
 """ This programme is use for receive email from hotmail.com with IMAP Protocol
 If used to receive 126.com 163.com will raise error at login step
@@ -192,4 +194,14 @@ def main():
         conn.logout()
 
 if __name__ == "__main__":
-    main()
+    try:
+
+        while True:
+            print("Begin Receive Mail at ", end="")
+            print(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            # main()
+            print("Sleeping...")
+            sleep(1*60)
+    except KeyboardInterrupt as e:
+        print("\b\bI was so tired!")
+        exit()
