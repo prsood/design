@@ -117,8 +117,6 @@ def download_mails(server_connection, mail):
                         utf_subject = ''.join(sample(hexdigits, 8))
 
             email_content = message_class.as_string(unixfrom=True)
-        else:
-            return None, None
     return email_content, utf_subject
 
 
@@ -141,7 +139,6 @@ def get_email_filename(directory, email_subject):
     finally:
         if fp is not None:
             fp.close()
-
     return filename
 
 
