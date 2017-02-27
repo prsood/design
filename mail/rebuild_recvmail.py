@@ -115,8 +115,8 @@ def download_mails(server_connection, mail):
                 finally:
                     if utf_subject is None:
                         utf_subject = ''.join(sample(hexdigits, 8))
-
-            email_content = message_class.as_string(unixfrom=True)
+            email_content = message_class.as_string()
+            email_content = email_content.replace('\n','\r')
     return email_content, utf_subject
 
 
