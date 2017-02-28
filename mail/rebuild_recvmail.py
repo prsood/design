@@ -80,6 +80,16 @@ def search_mailbox(server_connection, box='INBOX', flag='UNSEEN'):
     return box_status, mail_list
 
 
+def windows_style(func):
+    """Decorate for windows style"""
+    def _windows(conn, mail):
+        _content, _subject = func(conn, mail)
+        _w_content = _content.replace('\n', '\r\n')
+        return _w_content, _subject
+    return _windows
+
+
+@windows_style
 def download_mails(server_connection, mail):
     """ Download mail and return mail content.Return subject is to used to generate email file name
     'subject' is dict key in email head ,'from' ,'to' can be acquire too"""
@@ -198,6 +208,7 @@ def main():
             conn.expunge()
         conn.close()
         conn.logout()
+
 
 if __name__ == "__main__":
     try:
