@@ -19,6 +19,7 @@ install pip3:
 > sudo apt-get install python-pip
 > sudo pip3 install ConfigParser
 """
+__DEBUG__ = True
 
 
 def guess_mail_charset(sample_string):
@@ -133,22 +134,22 @@ def download_mails(server_connection, mail):
 def get_email_filename(directory, email_subject):
     """From email subject generate file name.If file has been exits or create file fail
     the file name is 8 random hex digits string"""
-    fp = None
     # Test if email file name is validate
-    try:
-        if email_subject is None:
-            raise IOError
-        filename = directory + email_subject + '.eml'
-        if isfile(filename):
-            raise IOError
-        fp = open(filename, 'w')
-    except IOError as err:
-        # if file has been exits or create file fail
-        # generate random string as email file name
-        filename = directory + ''.join(sample(hexdigits, 8)) + '.eml'
-    finally:
-        if fp is not None:
-            fp.close()
+
+    if email_subject is None:
+        if __DEBUG__:
+            print('Email subject is None')
+        return directory + ''.join(sample(hexdigits, 8)) + '.eml'
+    # replace invalid char
+    email_subject.replace('/', '_')
+    filename = directory + email_subject + '.eml'
+    # if file exits rename
+    if isfile(filename):
+        if __DEBUG__:
+            print('Finde Same Email subject [ %s ]' % filename)
+        copys = ''.join(sample(hexdigits, 3))
+        return directory + email_subject + '_' + copys + '.eml'
+    
     return filename
 
 
