@@ -19,8 +19,11 @@ install pip3:
 > sudo apt-get install python-pip
 > sudo pip3 install ConfigParser
 """
+# print more information
 __DEBUG__ = True
-
+# if true script will test mail file name,it's means more mail will
+# be written down
+__FILE_TEST__ = False
 
 def guess_mail_charset(sample_string):
     """Use re to detect mail charset . sample_string is original text from mail
@@ -139,16 +142,24 @@ def get_email_filename(directory, email_subject):
     if email_subject is None:
         if __DEBUG__:
             print('Email subject is None')
-        return directory + ''.join(sample(hexdigits, 8)) + '.eml'
+        if __FILE_TEST__:
+            return directory + ''.join(sample(hexdigits, 8)) + '.eml'
+        else:
+            return None
+
     # replace invalid char
     email_subject.replace('/', '_')
     filename = directory + email_subject + '.eml'
     # if file exits rename
+
     if isfile(filename):
         if __DEBUG__:
             print('Finde Same Email subject [ %s ]' % filename)
-        copys = ''.join(sample(hexdigits, 3))
-        return directory + email_subject + '_' + copys + '.eml'
+        if __FILE_TEST__:
+            copys = ''.join(sample(hexdigits, 3))
+            return directory + email_subject + '_' + copys + '.eml'
+        else:
+            return None
     
     return filename
 
@@ -194,9 +205,10 @@ def main():
         for mail in mail_list:
             mail_content, mail_subject = download_mails(conn, mail)
             filename = get_email_filename(directory, mail_subject)
-            with open(filename, 'w') as fp:
-                fp.write(mail_content)
-            change_mail_status(conn, mail)
+            if filename is not None:
+                with open(filename, 'w') as fp:
+                    fp.write(mail_content)
+                change_mail_status(conn, mail)
             process_count += 1
             if is_del:
                 change_mail_status(conn, mail, r'(\Deleted)')
