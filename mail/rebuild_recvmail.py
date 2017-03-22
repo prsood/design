@@ -20,10 +20,12 @@ install pip3:
 > sudo pip3 install ConfigParser
 """
 # print more information
-__DEBUG__ = True
+__DEBUG__ = False
 # if true script will test mail file name,it's means more mail will
 # be written down
 __FILE_TEST__ = False
+__FILE_REPEAT__ = False
+
 
 def guess_mail_charset(sample_string):
     """Use re to detect mail charset . sample_string is original text from mail
@@ -152,14 +154,17 @@ def get_email_filename(directory, email_subject):
     filename = directory + email_subject + '.eml'
     # if file exits rename
 
-    if isfile(filename):
-        if __DEBUG__:
-            print('Finde Same Email subject [ %s ]' % filename)
-        if __FILE_TEST__:
-            copys = ''.join(sample(hexdigits, 3))
-            return directory + email_subject + '_' + copys + '.eml'
-        else:
-            return None
+    # if __FILE_REPEAT__ true will check if same filename file exits and add 3 random hex letters at the file name
+    # end.if False same filename file will be overwrite
+    if __FILE_REPEAT__:
+        if isfile(filename):
+            if __DEBUG__:
+                print('Finde Same Email subject [ %s ]' % filename)
+            if __FILE_TEST__:
+                copy = ''.join(sample(hexdigits, 3))
+                return directory + email_subject + '_' + copy + '.eml'
+            else:
+                return None
     
     return filename
 
