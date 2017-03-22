@@ -21,10 +21,8 @@ install pip3:
 """
 # print more information
 __DEBUG__ = False
-# if true script will test mail file name,it's means more mail will
-# be written down
-__FILE_TEST__ = False
-__FILE_REPEAT__ = False
+__FILE_NAME_RANDOM__ = False  # if subject is None filename will rebuild by random or not
+__FILE_REPEAT__ = False  # filename repeat file will be overwrite or not
 
 
 def guess_mail_charset(sample_string):
@@ -139,32 +137,25 @@ def download_mails(server_connection, mail):
 def get_email_filename(directory, email_subject):
     """From email subject generate file name.If file has been exits or create file fail
     the file name is 8 random hex digits string"""
-    # Test if email file name is validate
 
-    if email_subject is None:
-        if __DEBUG__:
-            print('Email subject is None')
-        if __FILE_TEST__:
+    # replace invalid char
+    if email_subject is not None:
+        email_subject.replace('/', '_')
+        filename = directory + email_subject + '.eml'
+    else:
+        if __FILE_NAME_RANDOM__:
             return directory + ''.join(sample(hexdigits, 8)) + '.eml'
         else:
             return None
-
-    # replace invalid char
-    email_subject.replace('/', '_')
-    filename = directory + email_subject + '.eml'
-    # if file exits rename
 
     # if __FILE_REPEAT__ true will check if same filename file exits and add 3 random hex letters at the file name
     # end.if False same filename file will be overwrite
     if __FILE_REPEAT__:
         if isfile(filename):
-            if __DEBUG__:
-                print('Finde Same Email subject [ %s ]' % filename)
-            if __FILE_TEST__:
-                copy = ''.join(sample(hexdigits, 3))
-                return directory + email_subject + '_' + copy + '.eml'
-            else:
-                return None
+            copy = ''.join(sample(hexdigits, 3))
+            return directory + email_subject + '_' + copy + '.eml'
+        else:
+            return None
     
     return filename
 
@@ -206,6 +197,7 @@ def main():
             sleep(1)
     print('\nProcess ', end='', flush=True)
     # deal with mails
+    write_down = 0
     try:
         for mail in mail_list:
             mail_content, mail_subject = download_mails(conn, mail)
@@ -213,7 +205,9 @@ def main():
             if filename is not None:
                 with open(filename, 'w') as fp:
                     fp.write(mail_content)
-                change_mail_status(conn, mail)
+                    write_down += 1
+                # it's seems than when read email from server status will change auto
+                # change_mail_status(conn, mail)
             process_count += 1
             if is_del:
                 change_mail_status(conn, mail, r'(\Deleted)')
@@ -226,6 +220,7 @@ def main():
             conn.expunge()
         conn.close()
         conn.logout()
+        print('Write down emails : %03d of %03d' % (write_down, total_mail_count))
 
 
 if __name__ == "__main__":
