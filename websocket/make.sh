@@ -1,5 +1,3 @@
-rm -f shell >/dev/null
-rm -f ctrl >/dev/null
-gcc reverse_udp.c -O3 -lpthread -o shell 
-gcc udp-client.c -O3 -lpthread -o ctrl
+gcc reverse_udp.c -Wall -O3 -lpthread -o shell 
+gcc udp_client.c -Wall -O3 -lpthread -o ctrl
 
