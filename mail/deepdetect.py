@@ -2,6 +2,8 @@ from email import message_from_file
 from email.header import decode_header
 from random import sample
 from string import hexdigits
+from zipfile import ZipFile, is_zipfile
+from datetime import datetime
 import re
 import base64
 
@@ -12,7 +14,8 @@ Detect attachment file type,and save attachment
 
 
 def process_main_text(main_text):
-    print(main_text)
+    # print(main_text)
+    pass
 
 
 def process_attachment(content, filename, directory='./'):
@@ -124,6 +127,31 @@ def load_mail_from_file(mail_file):
 
     return message_class, utf_subject
 
+
+def unzip_attachment(attachment_file, unzip_file_path):
+    __ZIP_PASSWD__ = '123456'
+    if not is_zipfile(attachment_file):
+
+        return
+
+    zip_file = ZipFile(attachment_file)
+    for pack_file in zip_file.namelist():
+        zip_file.extract(pack_file, path=unzip_file_path, pwd=__ZIP_PASSWD__)
+
+
+def filter_time(eml_date_string, delta_days):
+    """eml_date_string can be obtained email by get('Date') function
+    delta_days is int value means if email received date before delta_days
+    will return false
+    """
+    now_dt = datetime.now()
+    fm_time = str()
+    time_list = eml_date_string.split()
+    for i in range(0, 5):
+        fm_time += time_list[i]
+
+    eml_dt = datetime.strptime(fm_time, '%a,%d%b%Y%H:%M:%S')
+    return (now_dt - eml_dt).days < delta_days
 
 if __name__ == '__main__':
     file_list = ['fw_attachment_pt.eml',
